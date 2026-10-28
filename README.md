@@ -72,12 +72,4 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 آن را به‌عنوان `NEXORA_ENCRYPTION_KEY` در `.env` ذخیره کن. این کلید را پیش از ذخیره اولین API Key تعیین کن؛ اگر قبلاً API Key ذخیره کرده‌ای و کلید رمزنگاری را عوض می‌کنی، باید API Key را دوباره وارد کنی. بعد از راه‌اندازی، کلید را گم یا عوض نکن.
 
-## بررسی قبل از انتشار
-
-```powershell
-python manage.py check
-python manage.py makemigrations --check --dry-run
-python manage.py test
-```
-
-قبل از push، مطمئن شو `.env`، `db.sqlite3`، کلیدهای API و اطلاعات شخصی داخل repository نیستند. برای استقرار عمومی، تنظیمات سرور و سیاست‌های نگهداری/حذف داده را جداگانه بررسی کن.
+## توجه این rademe توسط ai نوشته شده
