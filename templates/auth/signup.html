@@ -1,0 +1,8 @@
+{% extends "auth/base_auth.html" %}{% block title %}ساخت حساب{% endblock %}{% block content %}
+<section class="auth-card"><div class="auth-eyebrow">START YOUR JOURNEY</div><h1>حساب خودت رو بساز<span>.</span></h1><p class="auth-lead">مسیر یادگیری، پروژه‌ها و پیشرفتت برای حساب خودت ذخیره می‌شن.</p>
+<form method="post" class="auth-form">{% csrf_token %}{% if form.non_field_errors %}<div class="auth-errors">{{ form.non_field_errors }}</div>{% endif %}
+<label class="field"><span>نام کاربری</span>{{ form.username }}{% if form.username.errors %}<small class="field-error">{{ form.username.errors|striptags }}</small>{% endif %}<small>با این نام وارد Nexora می‌شی.</small></label>
+<label class="field"><span>رمز عبور</span>{{ form.password1 }}{% if form.password1.errors %}<small class="field-error">{{ form.password1.errors|striptags }}</small>{% endif %}</label>
+<label class="field"><span>تکرار رمز عبور</span>{{ form.password2 }}{% if form.password2.errors %}<small class="field-error">{{ form.password2.errors|striptags }}</small>{% endif %}</label>
+<button class="button button-primary auth-submit" type="submit">ساخت حساب و ادامه <span>↗</span></button></form>
+<p class="auth-switch">از قبل حساب داری؟ <a href="{% url 'login' %}">وارد شو</a></p></section>{% endblock %}

@@ -1,0 +1,7 @@
+{% extends "auth/base_auth.html" %}{% block title %}ورود{% endblock %}{% block content %}
+<section class="auth-card"><div class="auth-eyebrow">WELCOME BACK</div><h1>خوش برگشتی<span>.</span></h1><p class="auth-lead">ادامه مسیرت منتظرته؛ از همون‌جایی که بودی.</p>
+<form method="post" class="auth-form">{% csrf_token %}{% if form.non_field_errors %}<div class="auth-errors">نام کاربری یا رمز عبور درست نیست.</div>{% endif %}
+<label class="field"><span>نام کاربری</span>{{ form.username }}{% if form.username.errors %}<small class="field-error">{{ form.username.errors|striptags }}</small>{% endif %}</label>
+<label class="field"><span>رمز عبور</span>{{ form.password }}{% if form.password.errors %}<small class="field-error">{{ form.password.errors|striptags }}</small>{% endif %}</label>
+<button class="button button-primary auth-submit" type="submit">ورود به فضای کار <span>↗</span></button></form>
+<p class="auth-switch">حساب نداری؟ <a href="{% url 'signup' %}">رایگان بساز</a></p></section>{% endblock %}

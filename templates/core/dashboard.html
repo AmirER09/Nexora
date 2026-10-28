@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}داشبورد{% endblock %}
+{% block content %}
+<section class="welcome-row">
+  <div><div class="eyebrow"><span class="eyebrow-line"></span> YOUR PERSONAL DEV SPACE</div><h1>سلام {{ profile.display_name|default:request.user.username }}<span class="title-period">.</span></h1><p class="subtitle">هر روز لازم نیست شاهکار بسازی؛ فقط یه قدم از دیروز جلوتر باش.</p></div>
+  <a href="/mentor/" class="button button-primary"><span>✳</span> شروع یک جلسه یادگیری <span class="button-arrow">↖</span></a>
+</section>
+<section class="hero-card">
+  <div class="hero-grid"></div><div class="hero-content">
+    <div class="hero-tag"><span class="pulse-dot"></span> مسیر امروز تو <span class="tag-divider">/</span> MISSION 01</div>
+    <h2>از یادگیری تا <span>ساختن.</span></h2>
+    <p>یه مفهوم رو یاد بگیر، باهاش چیزی بساز و به نسخه قوی‌تری از خودت تبدیل شو.</p>
+    <div class="hero-actions"><a href="#missions" class="button button-light">دیدن مأموریت‌ها <span>↓</span></a><a href="/mentor/" class="text-link">با منتورت حرف بزن <span>↖</span></a></div>
+  </div>
+  <div class="hero-orb"><div class="orb-ring ring-one"></div><div class="orb-ring ring-two"></div><div class="orb-core"><span>n.</span></div><div class="orb-caption">LEARN <i>·</i> BUILD <i>·</i> REPEAT</div></div>
+  <div class="hero-bottom"><span><i class="tiny-green"></i> سیستم آماده‌ست</span><span>تمرکز روی پیشرفت، نه کمال‌گرایی</span></div>
+</section>
+<section class="stats-grid">
+  <div class="stat-card"><div class="stat-top"><span>تجربه کسب‌شده</span><span class="stat-icon purple-icon">✳</span></div><div class="stat-value"><strong id="total-xp">{{ total_xp }}</strong><small>XP</small></div><div class="stat-foot"><span class="trend">↗</span> هر پروژه یک قدم جلوتر</div></div>
+  <div class="stat-card"><div class="stat-top"><span>مأموریت‌های انجام‌شده</span><span class="stat-icon green-icon">✓</span></div><div class="stat-value"><strong id="completed-count">{{ completed_count }}</strong><small>/ <span id="total-count">{{ total_count }}</span></small></div><div class="stat-progress"><span style="width:{% if total_count %}{% widthratio completed_count total_count 100 %}{% else %}0{% endif %}%"></span></div><div class="stat-foot">پیشرفت با تمرین واقعی</div></div>
+  <div class="stat-card"><div class="stat-top"><span>استریک یادگیری</span><span class="stat-icon orange-icon">⌁</span></div><div class="stat-value"><strong>{{ streak }}</strong><small>روز</small></div><div class="stat-foot">روزهای پیاپی با مأموریت تکمیل‌شده ✨</div></div>
+</section>
+<section class="section-heading" id="missions"><div><div class="eyebrow">YOUR NEXT MOVE</div><h2>مأموریت‌های تو <span class="muted">({{ missions|length }})</span></h2><p>کارهای کوچک، مهارت‌های واقعی.</p></div><button class="button button-outline" id="new-mission"><span class="sparkle">✳</span> مأموریت جدید <span>＋</span></button></section>
+<div class="mission-grid" id="mission-grid" data-active-count="{{ active_mission_count }}">
+{% for mission in missions %}
+<article class="mission-card {% if mission.completed %}mission-complete{% endif %}" data-id="{{ mission.id }}">
+  <div class="mission-card-top"><span class="mission-type">{% if mission.skill == 'Python' %}PY{% elif mission.skill == 'Django' %}DJ{% else %}DB{% endif %} <i>·</i> {{ mission.skill }}</span><span class="difficulty">{{ mission.difficulty }}</span></div>
+  <div class="mission-symbol {% cycle 'symbol-purple' 'symbol-cyan' 'symbol-orange' %}">{% cycle '⌘' '⟡' '⌁' %}</div>
+  <h3>{{ mission.title }}</h3><p>{{ mission.description }}</p>
+  <div class="mission-footer"><span class="xp-label">✳ {{ mission.xp }} XP</span>
+  <div class="mission-actions">{% if mission.completed %}<span class="done-label">✓ تکمیل شد</span>{% else %}<button class="complete-button" data-complete="{{ mission.id }}">تکمیل مأموریت <span>←</span></button>{% endif %}<button class="mission-delete-button" type="button" data-delete-mission="{{ mission.id }}" aria-label="حذف مأموریت" title="حذف مأموریت">حذف ×</button></div></div>
+</article>
+{% endfor %}
+</div>
+<section class="portfolio-promo"><div class="portfolio-promo-mark">▧</div><div class="portfolio-promo-copy"><span class="eyebrow">YOUR WORK, YOUR STORY</span><h2>چیزهایی که یاد می‌گیری، باید دیده بشن.</h2><p>پروژه‌های تکمیل‌شده و مهارت‌هایی که با مأموریت‌ها ثابت کردی، خودکار وارد پورتفولیوت می‌شن.</p></div><a class="button button-primary" href="/portfolio/">دیدن پورتفولیو <span>↗</span></a></section>
+<section class="bottom-callout"><div class="callout-icon">✳</div><div><b>گیر کردی؟ لازم نیست تنهایی حلش کنی.</b><p>منتورت می‌تونه مفهوم رو توضیح بده، راهنمایی کنه و قدم بعدی رو پیشنهاد بده.</p></div><a href="/mentor/" class="callout-link">رفتن به منتور <span>↖</span></a></section>
+<section class="section-heading"><div><div class="eyebrow">YOUR NEXT LEVEL</div><h2>مهارت‌ها و مسیر رشد</h2><p>سطح بر اساس XP مأموریت‌های تکمیل‌شده محاسبه می‌شود.</p></div><a class="button button-outline" href="/learning/">باز کردن مرکز یادگیری ↗</a></section>
+{% if skills %}<div class="mission-grid">{% for skill in skills %}<article class="mission-card"><div class="mission-card-top"><span class="mission-type">SKILL · {{ skill.name }}</span><span class="difficulty">LV. {{ skill.level }}</span></div><h3>{{ skill.name }}</h3><p>{{ skill.xp }} XP کسب‌شده؛ برای سطح بعدی {{ skill.progress }}/100 XP پیشرفت کردی.</p><div class="stat-progress"><span style="width:{{ skill.progress }}%"></span></div></article>{% endfor %}</div>{% else %}<p class="subtitle">با تکمیل اولین مأموریت، مهارت‌ها و سطح‌ها اینجا ظاهر می‌شوند.</p>{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/js/dashboard.js"></script>{% endblock %}

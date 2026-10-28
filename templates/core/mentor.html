@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}منتور هوشمند{% endblock %}
+{% block breadcrumb %}منتور هوشمند{% endblock %}
+{% block content %}
+<section class="page-intro"><div><div class="eyebrow"><span class="eyebrow-line"></span> YOUR AI COMPANION</div><h1>اتاق منتور<span class="title-period">.</span></h1><p class="subtitle">سؤال بپرس، فکر کن، بساز. جواب‌ها برای یادگرفتنن، نه فقط کپی‌کردن.</p></div><div class="connection-chip"><span class="{% if active_ai_config %}status-light{% else %}status-light status-off{% endif %}"></span>{% if active_ai_config %}{{ active_ai_config.model }}{% else %}نیاز به تنظیم API{% endif %}</div></section>
+<div class="mentor-layout">
+  <aside class="mentor-rail">
+    <div class="rail-card"><div class="rail-icon">✳</div><h3>روش کار منتور</h3><p>اول راهنمایی، بعد توضیح. هدف اینه که خودت به جواب برسی.</p><div class="rail-rule"></div><div class="rail-point"><span>01</span> سؤال دقیق بپرس</div><div class="rail-point"><span>02</span> کدت رو اضافه کن</div><div class="rail-point"><span>03</span> قدم بعدی رو اجرا کن</div></div>
+    <div class="rail-tip"><span>⌘</span><div><b>یادت باشه</b><p>کلیدهای API ممکنه محدودیت یا هزینه داشته باشن. فقط از سرویس‌هایی استفاده کن که شرایط رایگانشون رو بررسی کردی.</p></div></div>
+  </aside>
+  <section class="chat-panel">
+    <div class="chat-header"><div class="mentor-avatar">✳</div><div><b>Nexora Mentor</b><small><span class="status-light"></span> منتور برنامه‌نویسی</small></div><div class="chat-header-right">AI SESSION <span>●</span></div></div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-day">شروع مسیر یادگیری</div>
+      <div class="chat-message assistant"><div class="chat-face">n.</div><div class="message-body"><div class="message-name">Nexora <span>MENTOR</span></div><div class="message-text">سلام! 👋 من منتور یادگیری توام. می‌تونم برای پروژه‌هات برنامه‌ریزی کنم، مفاهیم Python و Django رو توضیح بدم و در پیدا کردن باگ‌ها راهنماییت کنم.<br><br>دوست داری امروز چی یاد بگیری یا چه چیزی بسازی؟</div><div class="message-time">آماده برای شروع</div></div></div>
+      {% for item in history %}<div class="chat-message {{ item.role }}"><div class="chat-face">{% if item.role == 'user' %}A{% else %}n.{% endif %}</div><div class="message-body"><div class="message-name">{% if item.role == 'user' %}تو{% else %}Nexora{% endif %}</div><div class="message-text">{{ item.content|linebreaksbr }}</div></div></div>{% endfor %}
+    </div>
+    <div class="suggestions"><button data-prompt="یه پروژه کوچک Python متناسب با سطح مبتدی بهم پیشنهاد بده و مرحله‌بندی کن.">✳ پروژه پیشنهاد بده</button><button data-prompt="مفهوم QuerySet در Django رو با مثال ساده توضیح بده.">⌘ مفهوم رو توضیح بده</button><button data-prompt="کمکم کن یک باگ رو مرحله‌به‌مرحله دیباگ کنم؛ اول ازم کد و خطا رو بخواه.">⌁ دیباگ کد</button><button data-prompt="یه مأموریت جدید بساز">＋ ساخت مأموریت</button><button data-prompt="برنامه امروز رو بساز">▦ برنامه امروز</button><button data-prompt="یادداشت: عنوان یادداشت | متن یادداشت">▤ ثبت یادداشت</button><button data-prompt="پروژه: نام پروژه | توضیحات پروژه">◇ ثبت پروژه</button></div>
+    <form class="chat-compose" id="chat-form"><textarea id="chat-input" rows="1" maxlength="6000" placeholder="هر چیزی می‌خوای یاد بگیری اینجا بنویس..." required></textarea><button class="send-button" type="submit" aria-label="ارسال پیام">↑</button><div class="compose-bottom"><span>Enter برای ارسال · Shift + Enter برای خط جدید</span><span class="secure-note">⌑ گفتگو در دیتابیس محلی ذخیره می‌شود</span></div></form>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/mentor.js"></script>{% endblock %}

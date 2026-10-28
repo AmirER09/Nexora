@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}دفتر یادگیری{% endblock %}
+{% block breadcrumb %}دفتر یادگیری{% endblock %}
+{% block content %}
+<section class="page-intro"><div><div class="eyebrow">YOUR LEARNING JOURNAL</div><h1>دفتر یادگیری<span class="title-period">.</span></h1><p class="subtitle">نکته‌ها، خطاهایی که حل کردی و چیزهایی که نمی‌خوای فراموش کنی را ثبت کن.</p></div><a href="/" class="button button-outline">بازگشت به داشبورد ↖</a></section>
+<div class="journal-layout">
+  <section class="settings-card journal-form-card"><div class="card-heading"><div><div class="eyebrow">NEW NOTE</div><h2>یادداشت تازه</h2><p>یادداشت‌ها روی همین پایگاه داده ذخیره می‌شوند.</p></div><div class="heading-icon">✎</div></div>
+  <form method="post" action="{% url 'create_note' %}">{% csrf_token %}<label class="field"><span>عنوان</span><input name="title" maxlength="160" required placeholder="مثلاً: تفاوت get و filter در Django"></label><label class="field journal-content-field"><span>یادداشت</span><textarea name="content" rows="7" maxlength="20000" required placeholder="چی یاد گرفتی؟ چه چیزی هنوز مبهمه؟ کد یا مثال کوتاهت را اینجا بنویس..."></textarea></label><button class="button button-primary" type="submit">ذخیره یادداشت <span>＋</span></button></form></section>
+  <section class="journal-list"><div class="journal-list-heading"><div><div class="eyebrow">YOUR NOTES</div><h2>یادداشت‌های ذخیره‌شده <span class="muted">({{ notes|length }})</span></h2></div></div>
+  {% for note in notes %}<article class="journal-note"><div class="journal-note-top"><h3>{{ note.title }}</h3><time>{{ note.updated_at|date:"Y/m/d - H:i" }}</time></div><p>{{ note.content|linebreaksbr }}</p><form method="post" action="{% url 'delete_note' note.id %}" onsubmit="return confirm('این یادداشت حذف شود؟')">{% csrf_token %}<button type="submit" class="note-delete">حذف یادداشت ×</button></form></article>{% empty %}<div class="empty-missions">هنوز یادداشتی نداری. اولین نکته‌ای که امروز یاد گرفتی را ثبت کن ✨</div>{% endfor %}
+  </section>
+</div>
+{% endblock %}

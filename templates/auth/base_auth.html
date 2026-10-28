@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="aurora">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}حساب کاربری{% endblock %} · Nexora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('nexora-theme')||'aurora'}catch(e){document.documentElement.dataset.theme='aurora'}</script>
+<link rel="stylesheet" href="/static/css/app.css">
+</head><body class="auth-page"><div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+<main class="auth-shell"><a href="/" class="brand auth-brand"><span class="brand-mark"><span>n</span></span><span class="brand-name">nexora<small>YOUR AI LEARNING SPACE</small></span></a>
+{% if messages %}<div class="messages">{% for message in messages %}<div class="flash {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+{% block content %}{% endblock %}<p class="auth-footnote">یادگیری با مسیر خودت شروع می‌شه ✦</p></main></body></html>
