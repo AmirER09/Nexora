@@ -30,11 +30,11 @@
   <div class="mission-footer"><span class="xp-label">✳ {{ mission.xp }} XP</span>
   <div class="mission-actions">{% if mission.completed %}<span class="done-label">✓ تکمیل شد</span>{% else %}<button class="complete-button" data-complete="{{ mission.id }}">تکمیل مأموریت <span>←</span></button>{% endif %}<button class="mission-delete-button" type="button" data-delete-mission="{{ mission.id }}" aria-label="حذف مأموریت" title="حذف مأموریت">حذف ×</button></div></div>
 </article>
-{% endfor %}
+{% empty %}<div class="mission-empty">هنوز مأموریتی نداری. برای ساخت مأموریت اختصاصی، AI را در تنظیمات وصل کن و روی «مأموریت جدید» بزن.</div>{% endfor %}
 </div>
 <section class="portfolio-promo"><div class="portfolio-promo-mark">▧</div><div class="portfolio-promo-copy"><span class="eyebrow">YOUR WORK, YOUR STORY</span><h2>چیزهایی که یاد می‌گیری، باید دیده بشن.</h2><p>پروژه‌های تکمیل‌شده و مهارت‌هایی که با مأموریت‌ها ثابت کردی، خودکار وارد پورتفولیوت می‌شن.</p></div><a class="button button-primary" href="/portfolio/">دیدن پورتفولیو <span>↗</span></a></section>
 <section class="bottom-callout"><div class="callout-icon">✳</div><div><b>گیر کردی؟ لازم نیست تنهایی حلش کنی.</b><p>منتورت می‌تونه مفهوم رو توضیح بده، راهنمایی کنه و قدم بعدی رو پیشنهاد بده.</p></div><a href="/mentor/" class="callout-link">رفتن به منتور <span>↖</span></a></section>
 <section class="section-heading"><div><div class="eyebrow">YOUR NEXT LEVEL</div><h2>مهارت‌ها و مسیر رشد</h2><p>سطح بر اساس XP مأموریت‌های تکمیل‌شده محاسبه می‌شود.</p></div><a class="button button-outline" href="/learning/">باز کردن مرکز یادگیری ↗</a></section>
 {% if skills %}<div class="mission-grid">{% for skill in skills %}<article class="mission-card"><div class="mission-card-top"><span class="mission-type">SKILL · {{ skill.name }}</span><span class="difficulty">LV. {{ skill.level }}</span></div><h3>{{ skill.name }}</h3><p>{{ skill.xp }} XP کسب‌شده؛ برای سطح بعدی {{ skill.progress }}/100 XP پیشرفت کردی.</p><div class="stat-progress"><span style="width:{{ skill.progress }}%"></span></div></article>{% endfor %}</div>{% else %}<p class="subtitle">با تکمیل اولین مأموریت، مهارت‌ها و سطح‌ها اینجا ظاهر می‌شوند.</p>{% endif %}
 {% endblock %}
-{% block scripts %}<script src="/static/js/dashboard.js"></script>{% endblock %}
+{% block scripts %}<script src="/static/js/dashboard.js?v=20261029-pro-ui"></script>{% endblock %}

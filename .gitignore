@@ -23,3 +23,7 @@ htmlcov/
 .mypy_cache/
 .DS_Store
 Thumbs.db
+
+build/
+dist/
+Nexora.spec

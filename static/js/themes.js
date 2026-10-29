@@ -1,5 +1,5 @@
 (function(){
-  const allowed=['aurora','ocean','rose','emerald','sunset'];
+  const allowed=['aurora','ocean','rose','emerald','sunset','pearl','lavender-light','mint-light'];
   const select=document.getElementById('theme-select');
   const serverTheme=document.documentElement.dataset.theme||'aurora';
   function apply(theme,save){

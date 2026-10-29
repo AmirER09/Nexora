@@ -1,6 +1,5 @@
 import json
 import re
-import random
 from functools import wraps
 from django.db.models import F
 from django.db import transaction
@@ -14,7 +13,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_protect
-from .models import (AIConfig, Mission, ChatMessage, LearningNote, CodeProject, DailyPlan, Quiz, QuizAttempt, AgentNotice, AIUsage, UserProfile)
+from .models import (AIConfig, Mission, ChatMessage, LearningNote, CodeProject, DailyPlan, Quiz, QuizAttempt, AgentNotice, AIUsage, UserProfile, LearningPath)
 from .ai import call_ai, _safe_base_url
 
 def onboarding_required(view_func):
@@ -51,7 +50,7 @@ INTEREST_CHOICES = [
     ("AI", "هوش مصنوعی"), ("Cybersecurity", "امنیت سایبری"), ("Data", "داده و تحلیل"),
     ("GameDev", "بازی‌سازی"), ("Mobile", "اپلیکیشن موبایل"), ("Problem solving", "حل مسئله و الگوریتم"),
 ]
-THEMES = {"aurora", "ocean", "rose", "emerald", "sunset"}
+THEMES = {"aurora", "ocean", "rose", "emerald", "sunset", "pearl", "lavender-light", "mint-light"}
 
 def signup(request):
     if request.user.is_authenticated:
@@ -100,20 +99,6 @@ def onboarding(request):
         profile.onboarding_complete = True
         profile.save()
         
-        if not Mission.objects.filter(user=request.user).exists():
-            topics = set(selected)
-            templates = []
-            if "Python" in topics: templates.append({"title":"اولین تابع پایتون", "description":"یک تابع کوچک بنویس، ورودی و خروجی‌اش را آزمایش کن و رفتار ورودی نامعتبر را مشخص کن.", "difficulty":"آسان", "skill":"Python", "xp":30})
-            if "Django" in topics: templates.append({"title":"اولین صفحه Django", "description":"یک view و template بساز، URL را وصل کن و مسیر درخواست را توضیح بده.", "difficulty":"آسان", "skill":"Django", "xp":40})
-            if "Frontend" in topics: templates.append({"title":"کارت واکنش‌گرا", "description":"با HTML و CSS یک کارت بساز که روی موبایل و دسکتاپ درست نمایش داده شود.", "difficulty":"آسان", "skill":"Frontend", "xp":30})
-            if "AI" in topics: templates.append({"title":"مفهوم مدل و داده", "description":"تفاوت دادهٔ ورودی، مدل و خروجی را با یک نمونهٔ کوچک توضیح بده.", "difficulty":"آسان", "skill":"AI basics", "xp":35})
-            if "Cybersecurity" in topics: templates.append({"title":"اصول رمز عبور امن", "description":"با یک مثال توضیح بده چرا طول، یکتایی و مدیریت امن رمز عبور مهم‌اند.", "difficulty":"آسان", "skill":"Security", "xp":30})
-            if "Data" in topics: templates.append({"title":"تحلیل یک مجموعه داده کوچک", "description":"یک فهرست داده بساز، تعداد، میانگین و بیشترین مقدار را با کد محاسبه کن.", "difficulty":"آسان", "skill":"Data", "xp":35})
-            if "GameDev" in topics: templates.append({"title":"منطق یک بازی کوچک", "description":"قوانین یک بازی حدس عدد را بنویس و حالت برد، باخت و تلاش دوباره را پیاده‌سازی کن.", "difficulty":"آسان", "skill":"Game development", "xp":35})
-            if "Mobile" in topics: templates.append({"title":"طراحی جریان یک اپ موبایل", "description":"سه صفحه اصلی اپلیکیشن دلخواهت را مشخص کن و مسیر کلیک بین صفحه‌ها را رسم یا توصیف کن.", "difficulty":"آسان", "skill":"Mobile", "xp":25})
-            if "Problem solving" in topics: templates.append({"title":"حل مسئله با چند مثال", "description":"یک مسئله ساده انتخاب کن، سه ورودی نمونه بنویس و راه‌حل را قبل از کدنویسی به مراحل کوچک بشکن.", "difficulty":"آسان", "skill":"Problem solving", "xp":30})
-            if not templates: templates = DEFAULT_MISSIONS[:2]
-            for item in templates[:6]: Mission.objects.create(user=request.user, **item)
         return redirect("dashboard")
     return render(request, "auth/onboarding.html", {"profile": profile, "choices": INTEREST_CHOICES})
 
@@ -146,13 +131,17 @@ def update_interests(request):
         return redirect("learning_hub")
     profile.interests = merged
     profile.save(update_fields=["interests", "updated_at"])
+    # A changed learning profile invalidates old chat context and generated roadmaps.
+    ChatMessage.objects.filter(user=request.user).delete()
+    LearningPath.objects.filter(user=request.user).delete()
+    AgentNotice.objects.filter(user=request.user, delivered_to_agent=False).update(delivered_to_agent=True)
     AgentNotice.objects.create(
         user=request.user,
         kind="learning_interests_updated",
         title="موضوع‌های یادگیری به‌روزرسانی شد",
         detail="موضوع‌های فعلی: " + ", ".join(merged),
     )
-    messages.success(request, "موضوع‌های یادگیری ذخیره شد؛ منتور و مأموریت‌های بعدی از این علایق استفاده می‌کنند.")
+    messages.success(request, "علایق جدید ذخیره شد. حافظه گفت‌وگوی قبلی و مسیرهای قدیمی پاک شدند تا منتور از علایق تازه شروع کند.")
     return redirect("learning_hub")
 
 def estimate_project_minutes(title, description="", language="Python"):
@@ -194,20 +183,9 @@ def save_theme(request):
         return redirect(next_url)
     return redirect("dashboard")
 
-DEFAULT_MISSIONS = [
-    {"title": "تابع تخفیف‌ساز", "description": "تابعی در Python بنویس که قیمت و درصد تخفیف را بگیرد و قیمت نهایی را برگرداند. برای ورودی نامعتبر هم یک رفتار مشخص در نظر بگیر.", "difficulty": "آسان", "skill": "Python", "xp": 30},
-    {"title": "ردیابی یک باگ", "description": "یک مثال کوچک از خطای TypeError در Python بساز، علتش را توضیح بده و کد را اصلاح کن. هدف، فهمیدن خطاست نه حفظ‌کردن جواب.", "difficulty": "آسان", "skill": "Debugging", "xp": 35},
-    {"title": "اولین نمای Django", "description": "یک view ساده بساز که یک صفحه HTML را render کند. مسیر URL را وصل کن و تفاوت view، URL و template را با زبان خودت توضیح بده.", "difficulty": "متوسط", "skill": "Django", "xp": 50},
-    {"title": "جست‌وجوی محصولات", "description": "برای فهرست محصولات یک جست‌وجوی ساده پیاده‌سازی کن. ابتدا منطق فیلتر را با یک لیست پایتون آزمایش کن، سپس درباره QuerySet فکر کن.", "difficulty": "متوسط", "skill": "Django", "xp": 60},
-]
-
 @onboarding_required
 def dashboard(request):
     missions = list(Mission.objects.filter(user=request.user)[:6])
-    if not missions:
-        for item in DEFAULT_MISSIONS:
-            Mission.objects.create(user=request.user, **item)
-        missions = list(Mission.objects.filter(user=request.user)[:6])
     completed = Mission.objects.filter(user=request.user, completed=True)
     total_xp = sum(m.xp for m in completed)
     return render(request, "core/dashboard.html", {
@@ -349,50 +327,32 @@ def execute_chat_action(request, user_text):
         w in low for w in ("بساز", "ایجاد", "اضافه", "جدید", "درست کن", "تعریف کن")
     )
     if wants_create:
-        skill_map = {
-            "Django": ("Django", "یک قابلیت کوچک Django"),
-            "Frontend": ("Frontend", "یک تمرین فرانت‌اند"),
-            "AI": ("AI basics", "یک تمرین هوش مصنوعی"),
-            "Cybersecurity": ("Security", "یک تمرین امنیتی"),
-            "Data": ("Data", "یک تمرین تحلیل داده"),
-            "GameDev": ("Game development", "یک تمرین بازی‌سازی"),
-            "Mobile": ("Mobile", "یک تمرین اپلیکیشن موبایل"),
-            "Problem solving": ("Problem solving", "یک تمرین حل مسئله"),
-            "Python": ("Python", "یک تمرین پایتون"),
-        }
-        chosen = next((x for x in (profile.interests or []) if x in skill_map), "Python")
-        skill, default_title = skill_map[chosen]
-        subject = re.sub(r"^(?:لطفاً\s*)?(?:یه|یک)?\s*(?:مأموریت|ماموریت)\s*", "", text, flags=re.I)
-        subject = re.sub(r"\s*(?:برام|برای من)?\s*(?:بساز|ایجاد کن|اضافه کن|جدید بساز|درست کن|تعریف کن)\s*[.!؟]*$", "", subject, flags=re.I).strip(" :،-")
-        subject = re.sub(r"^(?:درباره|برای تمرین|در مورد)\s+", "", subject, flags=re.I).strip()
-        generic = subject.casefold() in {"", "جدید", "تازه", "جدید برام", "مناسب سطح من", "برام"}
-        if not generic:
-            sublow = subject.casefold()
-            for token, inferred in (("django", "Django"), ("جنگو", "Django"), ("python", "Python"),
-                                    ("پایتون", "Python"), ("html", "Frontend"), ("css", "Frontend"),
-                                    ("امنیت", "Cybersecurity"), ("داده", "Data"), ("الگوریتم", "Problem solving")):
-                if token in sublow:
-                    chosen = inferred
-                    skill, default_title = skill_map.get(chosen, (skill, default_title))
-                    break
-        title = (default_title if generic else subject)[:180]
-        if Mission.objects.filter(user=request.user, title=title, completed=False).exists():
-            title = f"{title} ({Mission.objects.filter(user=request.user).count() + 1})"
-        description = (
-            f"هدف: {title}.\n\n"
-            f"۱) یک نمونه کوچک و قابل اجرا متناسب با سطح {profile.current_level} بساز.\n"
-            "۲) حداقل سه حالت یا ورودی مختلف را آزمایش کن.\n"
-            "۳) نتیجه را بررسی کن و توضیح بده چه چیزی یاد گرفتی.\n\n"
-            f"معیار تکمیل: خروجی کار می‌کند، آزمایش‌ها ثبت شده‌اند و می‌توانی راه‌حل را توضیح بدهی. "
-            f"این تمرین با هدف «{profile.main_goal}» هماهنگ شده است."
-        )
-        mission = Mission.objects.create(
-            user=request.user, title=title, description=description,
-            difficulty="آسان" if profile.current_level == "مبتدی" else "متوسط",
-            skill=skill, xp=40 if skill == "Django" else 35,
-        )
-        AgentNotice.objects.create(user=request.user, title=f"مأموریت جدید: {mission.title}", detail=mission.description)
-        return f"✅ مأموریت «{mission.title}» ساخته و در داشبورد ذخیره شد.\nمهارت: {mission.skill} · پاداش: {mission.xp} XP\n\n{mission.description}"
+        try:
+            mission = _create_ai_mission(request.user, request_text=text)
+        except Exception as exc:
+            return f"⚠️ مأموریت ساخته نشد و چیزی به دیتابیس اضافه نکردم. {str(exc)[:300]}"
+        return (f"✅ مأموریت «{mission.title}» با هوش مصنوعی ساخته و ذخیره شد.\n"
+                f"مهارت: {mission.skill} · پاداش: {mission.xp} XP\n\n{mission.description}")
+
+    path_terms = ("مسیر یادگیری", "نقشه راه", "roadmap", "learning path")
+    path_verbs = ("بساز", "ایجاد کن", "درست کن", "طراحی کن", "برام بساز", "تهیه کن")
+    if any(term in low for term in path_terms) and any(verb in low for verb in path_verbs):
+        topic = (profile.interests or ["برنامه‌نویسی"])[0]
+        match = re.search(r"(?:برای|درباره|در زمینه)\s+(.+?)(?:\s+(?:یه|یک)?\s*(?:مسیر یادگیری|نقشه راه)|\s*(?:بساز|ایجاد کن|درست کن|طراحی کن|تهیه کن))", text, flags=re.I)
+        if match:
+            candidate = match.group(1).strip(" ،:؛-.")
+            if candidate and candidate.casefold() not in {"من", "خودم", "من یه", "من یک"} and len(candidate) <= 100:
+                topic = candidate
+        else:
+            match = re.search(r"(?:مسیر یادگیری|نقشه راه)\s+(?:برای|درباره|در زمینه)?\s*(.+?)(?:\s+(?:بساز|ایجاد کن|درست کن|طراحی کن|تهیه کن))?$", text, flags=re.I)
+            if match and match.group(1).strip():
+                topic = match.group(1).strip(" ،:؛-.")[:100]
+        try:
+            path = _create_ai_learning_path(request.user, topic)
+        except Exception as exc:
+            return f"⚠️ مسیر یادگیری ساخته نشد و چیزی ذخیره نکردم. {str(exc)[:280]}"
+        return (f"🧭 مسیر «{path.title}» برای تخصص {path.topic} با AI ساخته و ذخیره شد. "
+                f"این مسیر {len(path.steps)} مرحله دارد. برای دیدن مراحل و ثبت پیشرفت برو به مرکز یادگیری: /learning/")
 
     wants_complete = any(w in low for w in ("تکمیل کن", "کامل کن", "انجام شد", "تموم کردم", "تمام کردم", "انجامش دادم")) and any(w in low for w in mission_words)
     if wants_complete:
@@ -463,17 +423,9 @@ def execute_chat_action(request, user_text):
                         f"شروع آزمون: /learning/quizzes/{quiz.pk}/\n"
                         "تصحیح پاسخ‌ها و ذخیره نتیجه روی سرور خود Nexora انجام می‌شود.")
             except Exception as exc:
-                quiz = create_local_quiz(request.user, topic)
-                AgentNotice.objects.create(user=request.user, title=f"آزمون محلی ساخته شد: {quiz.title}", detail=f"ساخت AI ناموفق بود: {str(exc)[:300]}")
-                return (f"⚠️ اتصال/خروجی هوش مصنوعی برای ساخت آزمون موفق نشد؛ برای اینکه معطل نشی یک آزمون محلی ساختم: «{quiz.title}».\n"
-                        f"شروع: /learning/quizzes/{quiz.pk}/\n"
-                        "این آزمون با AI ساخته نشده؛ تنظیمات API یا مدل را بررسی کن و دوباره امتحان کن.")
-        quiz = create_local_quiz(request.user, topic)
-        AgentNotice.objects.create(user=request.user, title=f"آزمون محلی ساخته شد: {quiz.title}", detail="برای ساخت آزمون با AI باید API Key تنظیم شده باشد و سقف روزانه باقی مانده باشد.")
+                return f"⚠️ آزمون ساخته نشد و هیچ آزمون محلی جایگزین نکردم. علت: {str(exc)[:250]}"
         reason = "API تنظیم نشده" if not config or not config.get_api_key() else "سقف درخواست روزانه AI تمام شده"
-        return (f"🧠 آزمون محلی «{quiz.title}» ساخته شد. این آزمون با AI تولید نشده چون {reason}.\n"
-                f"شروع: /learning/quizzes/{quiz.pk}/\n"
-                "برای تولید سؤال با AI، API را در تنظیمات ذخیره کن و دوباره دستور بده.")
+        return f"⚠️ آزمون ساخته نشد چون {reason}. هیچ آزمون ساختگی ذخیره نکردم."
 
     if any(word in low for word in ("پورتفولیو", "نمونه کار", "نمونه‌کار", "portfolio")):
         done_projects = CodeProject.objects.filter(user=request.user, status="done").count()
@@ -488,22 +440,13 @@ def execute_chat_action(request, user_text):
                 "مشاهده پورتفولیو: /portfolio/")
 
     if any(p in low for p in ("برنامه روزانه بساز", "برنامه امروز بساز", "برنامه یادگیری امروز", "برنامه امروز رو بساز")):
-        today = timezone.localdate()
-        plan = DailyPlan.objects.filter(user=request.user, plan_date=today).first()
-        if plan:
-            return "📅 برنامه امروزت از قبل ساخته شده:\n" + "\n".join(f"• {i.get('title', 'تمرین')} ({i.get('minutes', 0)} دقیقه)" for i in plan.items)
-        topic = (profile.interests or ["Python"])[0]
-        total = max(10, min(240, profile.daily_minutes))
-        first, second = max(5, total // 3), max(5, total // 3)
-        third = max(5, total - first - second)
-        items = [
-            {"title": f"مرور {topic}", "minutes": first, "task": f"یک مفهوم از {topic} را با زبان خودت توضیح بده."},
-            {"title": "تمرین عملی کوتاه", "minutes": second, "task": f"یک تمرین کوچک مرتبط با {topic} انجام بده."},
-            {"title": "ثبت آموخته‌ها", "minutes": third, "task": "یک نکته و یک سؤال برای جلسه بعد ثبت کن."},
-        ]
-        plan = DailyPlan.objects.create(user=request.user, plan_date=today, title="برنامه یادگیری امروز", items=items, generated_by_ai=False)
-        AgentNotice.objects.create(user=request.user, title="برنامه روزانه ساخته شد", detail=plan.title)
-        return "📅 برنامه امروز ساخته و ذخیره شد:\n" + "\n".join(f"• {i['title']} ({i['minutes']} دقیقه): {i['task']}" for i in items)
+        try:
+            plan_data = _generate_ai_daily_plan(request.user, force=False)
+        except Exception as exc:
+            return f"⚠️ برنامه ساخته نشد و برنامهٔ ساختگی ذخیره نکردم. {str(exc)[:300]}"
+        return "📅 برنامه امروز با AI ساخته شد:\n" + "\n".join(
+            f"• {item['title']} ({item['minutes']} دقیقه): {item['task']}" for item in plan_data["items"]
+        )
     return None
 
 @onboarding_required
@@ -527,9 +470,9 @@ def chat_api(request):
         return JsonResponse({"reply": action_reply, "action_executed": True})
     config = get_user_ai_config(request.user)
     if not config or not config.get_api_key():
-        answer = "هنوز API تنظیم نشده! از بخش تنظیمات یک ارائه‌دهنده انتخاب کن و API Key را وارد کن. تا آن زمان می‌توانی از مأموریت‌های آماده داشبورد استفاده کنی."
+        answer = "هنوز API تنظیم نشده است. از بخش تنظیمات یک ارائه‌دهنده انتخاب کن و API Key را وارد کن. تا آن زمان می‌توانی اطلاعات و کارهای ذخیره‌شده‌ات را ببینی، اما تولید محتوای هوشمند انجام نمی‌شود."
     elif not ai_quota_available(request.user, config):
-        answer = "سقف درخواست AI امروز این حساب تمام شده؛ فردا دوباره امتحان کن یا از مأموریت‌ها و ابزارهای آفلاین Nexora استفاده کن."
+        answer = "سقف درخواست AI امروز این حساب تمام شده است. فردا دوباره امتحان کن یا سهمیه/مدل ارائه‌دهنده را بررسی کن؛ برای جلوگیری از ذخیره محتوای ساختگی، این درخواست اجرا نشد."
     else:
         recent = list(ChatMessage.objects.filter(user=request.user).order_by("-created_at")[:16])
         recent.reverse()
@@ -562,8 +505,13 @@ def chat_api(request):
             f"نتایج آزمون‌های اخیر: {score_context}.\n"
             "از این یادداشت‌ها و ایده‌ها هنگام پاسخ‌دادن به پرسش‌های مرتبط استفاده کن؛ اگر کاربر گفت ایده/یادداشتش را بررسی یا خلاصه کن، به همین داده‌های واقعی استناد کن. "
             "اطلاعات این حساب را با هیچ کاربر دیگری ترکیب نکن. اگر داده‌ای در زمینه نیست، صادقانه بگو. "
-            "برنامه، مثال‌ها و پیشنهاد پروژه‌ها را بر اساس این داده‌های واقعی و علاقه‌ها تنظیم کن. "
-            "پیشرفت یا مهارتی را که در داده‌ها نیست، وانمود نکن. برای موضوعات خارج از علاقه‌ها هم اگر کاربر خواست کمک کن."
+            "این پروفایل تازه‌ترین مرجع معتبر است و همیشه بر هر پیام قدیمی‌تر در تاریخچه اولویت دارد. "
+            "اگر علایق فعلی با موضوعات قبلی گفتگو متفاوت است، علایق فعلی را جایگزین کن و موضوع قبلی را فقط وقتی دنبال کن که کاربر صریحاً درخواست کند. "
+            "برنامه، مثال‌ها و پیشنهاد پروژه‌ها را بر اساس این داده‌های واقعی و علاقه‌های فعلی تنظیم کن. "
+            "پیشرفت یا مهارتی را که در داده‌ها نیست، وانمود نکن. برای موضوعات خارج از علاقه‌ها هم اگر کاربر خواست کمک کن. "
+            "پاسخ را فارسی، روشن، عملی و متناسب با سطح یادگیرنده بنویس؛ برای مسئله‌های بزرگ، مراحل و معیار موفقیت بده و در صورت امکان نمونه قابل اجرا ارائه کن. "
+            "وقتی کاربر درخواست ساخت مأموریت، مسیر یادگیری، آزمون یا برنامه می‌کند، Nexora فقط در صورت اجرای عملیات واقعی سمت سرور آن را ذخیره می‌کند؛ هرگز ادعا نکن چیزی ذخیره شده مگر اینکه عملیات واقعاً موفق شده باشد. "
+            "اگر اطلاعات کافی برای انجام کار وجود دارد، بی‌دلیل سؤال اضافه نپرس. اگر درخواست مبهم است و نتیجه را تغییر می‌دهد، یک سؤال دقیق بپرس."
         )})
         pending = list(AgentNotice.objects.filter(user=request.user, delivered_to_agent=False)[:10]) if config.auto_notify_agent else []
         if pending:
@@ -585,71 +533,74 @@ def chat_api(request):
     ChatMessage.objects.create(user=request.user, role="assistant", content=answer)
     return JsonResponse({"reply": answer})
 
+def _create_ai_mission(user, config=None, request_text=""):
+    """Generate and persist one mission only after a valid AI response."""
+    config = config or get_user_ai_config(user)
+    if not config or not config.get_api_key():
+        raise RuntimeError("ابتدا از تنظیمات، سرویس هوش مصنوعی و API Key را پیکربندی کن.")
+    if not ai_quota_available(user, config):
+        raise RuntimeError("سهمیه روزانه هوش مصنوعی تمام شده است.")
+    profile = UserProfile.objects.get_or_create(user=user, defaults={"display_name": user.username})[0]
+    active = list(Mission.objects.filter(user=user, completed=False).values_list("title", flat=True)[:20])
+    completed = list(Mission.objects.filter(user=user, completed=True).order_by("-completed_at").values_list("title", flat=True)[:15])
+    current_topics = profile.interests or []
+    prompt = (
+        "تو طراح مسیر یادگیری Nexora هستی. دقیقاً یک مأموریت آموزشی اختصاصی به زبان فارسی بساز. "
+        "فقط JSON معتبر با کلیدهای title, description, difficulty, skill, xp برگردان. "
+        "توضیح باید شامل هدف، مراحل اجرایی و معیار تکمیل قابل سنجش باشد. مأموریت برای یک جلسه کوتاه متناسب با زمان روزانه باشد. "
+        "از کارهای کلیشه‌ای و تکرار مأموریت‌های فعال پرهیز کن. اگر علایق قدیمی در تاریخچه دیده می‌شوند، آن‌ها را نادیده بگیر؛ فقط پروفایل فعلی مرجع است. "
+        f"علایق فعلی: {current_topics}. سطح: {profile.current_level}. هدف اصلی: {profile.main_goal}. "
+        f"زمان روزانه: {profile.daily_minutes} دقیقه. مأموریت‌های فعال که نباید تکرار شوند: {active}. "
+        f"مأموریت‌های تکمیل‌شده برای ادامه منطقی مسیر: {completed}. مقدار xp عددی بین 10 تا 100 باشد. "
+        f"درخواست مشخص کاربر (اگر خالی نیست باید رعایت شود): {request_text or 'یک مأموریت مناسب قدم بعدی پیشنهاد بده'}."
+    )
+    record_ai_usage(user, len(prompt))
+    raw = call_ai(config, [{"role": "user", "content": prompt}])
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        raise RuntimeError("پاسخ AI ساختار JSON معتبری نداشت؛ چیزی ذخیره نشد.")
+    try:
+        data = json.loads(raw[start:end + 1])
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("پاسخ AI قابل‌خواندن نبود؛ چیزی ذخیره نشد.") from exc
+    title = str(data.get("title", "")).strip()[:180]
+    description = str(data.get("description", "")).strip()[:5000]
+    if not title or not description:
+        raise RuntimeError("عنوان یا توضیح مأموریت خالی بود؛ چیزی ذخیره نشد.")
+    if Mission.objects.filter(user=user, title__iexact=title, completed=False).exists():
+        raise RuntimeError("AI مأموریتی مشابه یکی از کارهای فعال ساخت؛ دوباره درخواست بده تا گزینه متفاوتی تولید شود.")
+    try:
+        xp = max(10, min(100, int(data.get("xp", 30))))
+    except (TypeError, ValueError):
+        xp = 30
+    mission = Mission.objects.create(
+        user=user, title=title, description=description,
+        difficulty=str(data.get("difficulty", "متوسط"))[:24],
+        skill=str(data.get("skill", (current_topics or ["یادگیری"])[0]))[:80], xp=xp,
+    )
+    AgentNotice.objects.create(user=user, title=f"مأموریت AI ساخته شد: {mission.title}", detail=mission.description)
+    return mission
+
+
 @onboarding_required
 @require_POST
 def new_mission(request):
-    learner = UserProfile.objects.get_or_create(user=request.user, defaults={"display_name": request.user.username})[0]
-    config = get_user_ai_config(request.user)
-    if not config or not config.get_api_key() or not ai_quota_available(request.user, config):
-        
-        fallback_by_interest = {
-            "Python": {"title":"تمرین تازه Python", "description":"یک تابع کوچک متناسب با سطح خودت بساز، سه ورودی مختلف را امتحان کن و نتیجه‌ها را توضیح بده.", "difficulty":"آسان", "skill":"Python", "xp":30},
-            "Django": {"title":"یک قابلیت کوچک Django", "description":"یک قابلیت ساده به پروژه‌ات اضافه کن؛ URL، view و template مربوط را به هم وصل و آزمایش کن.", "difficulty":"آسان", "skill":"Django", "xp":40},
-            "Frontend": {"title":"یک بخش واکنش‌گرا", "description":"یک بخش کوچک با HTML و CSS بساز و نمایش آن را در عرض موبایل و دسکتاپ بررسی کن.", "difficulty":"آسان", "skill":"Frontend", "xp":30},
-            "AI": {"title":"آزمایش ورودی و خروجی مدل", "description":"برای یک کاربرد هوش مصنوعی، ورودی، خروجی مورد انتظار و دو حالت خطا را تعریف کن.", "difficulty":"آسان", "skill":"AI basics", "xp":35},
-            "Cybersecurity": {"title":"بررسی امنیت یک فرم", "description":"سه ورودی نامعتبر برای یک فرم فرضی مشخص کن و توضیح بده سمت سرور چطور باید اعتبارسنجی شوند.", "difficulty":"آسان", "skill":"Security", "xp":35},
-            "Data": {"title":"تحلیل داده کوچک", "description":"یک مجموعه داده کوچک بساز و تعداد، میانگین و بیشترین مقدار را با کد محاسبه کن.", "difficulty":"آسان", "skill":"Data", "xp":35},
-            "GameDev": {"title":"قانون تازه برای بازی", "description":"برای یک بازی ساده، یک قانون جدید اضافه کن و حالت‌های برد، باخت و شروع دوباره را آزمایش کن.", "difficulty":"آسان", "skill":"Game development", "xp":35},
-            "Mobile": {"title":"جریان صفحه‌های اپ", "description":"سه صفحه برای یک اپ انتخاب کن و مسیر رفت‌وآمد کاربر بین آن‌ها را با یک نمونه ساده مشخص کن.", "difficulty":"آسان", "skill":"Mobile", "xp":25},
-            "Problem solving": {"title":"شکستن یک مسئله", "description":"یک مسئله ساده را انتخاب کن، سه ورودی نمونه بنویس و راه‌حل را به گام‌های کوچک تقسیم کن.", "difficulty":"آسان", "skill":"Problem solving", "xp":30},
-        }
-        interest = next((topic for topic in learner.interests if topic in fallback_by_interest), "Python")
-        item = fallback_by_interest[interest].copy()
-        item["title"] = f"{item['title']} · {Mission.objects.filter(user=request.user).count() + 1}"
-        mission = Mission.objects.create(user=request.user, **item)
-        AgentNotice.objects.create(user=request.user, title=f"مأموریت جدید: {mission.title}", detail=f"مهارت: {mission.skill}. دشواری: {mission.difficulty}. هدف: {mission.description}")
-        return JsonResponse({"ok": True, "id": mission.id, "title": mission.title, "description": mission.description,
-                             "skill": mission.skill, "difficulty": mission.difficulty, "xp": mission.xp,
-                             "notice": "مأموریت ذخیره شد؛ رویداد آن برای منتور ثبت شد.",
-                             "total_count": Mission.objects.filter(user=request.user).count()})
-    interest_text = ", ".join(learner.interests) or "Python"
-    prompt = (
-        "Create exactly one beginner-friendly, practical programming learning mission in Persian. "
-        "Return only JSON with keys title, description, difficulty, skill, xp. "
-        "The task must be achievable in 20-45 minutes, include clear acceptance criteria, and teach one concept. "
-        f"Match the learner's interests ({interest_text}), level ({learner.current_level}) and goal ({learner.main_goal}). "
-        "Avoid repeating generic calculator or todo tasks. Current mission titles: " +
-        ", ".join(Mission.objects.filter(user=request.user).values_list("title", flat=True)[:20])
-    )
     try:
-        record_ai_usage(request.user, len(prompt))
-        text = call_ai(config, [{"role": "user", "content": prompt}])
-        start, end = text.find("{"), text.rfind("}")
-        data = json.loads(text[start:end+1])
-        mission = Mission.objects.create(
-            user=request.user, title=str(data.get("title", "مأموریت تازه"))[:180],
-            description=str(data.get("description", ""))[:5000],
-            difficulty=str(data.get("difficulty", "شروع"))[:24],
-            skill=str(data.get("skill", "Python"))[:80],
-            xp=max(10, min(150, int(data.get("xp", 30)))),
-        )
-        AgentNotice.objects.create(user=request.user, title=f"مأموریت جدید: {mission.title}", detail=f"مهارت: {mission.skill}. دشواری: {mission.difficulty}. هدف: {mission.description}")
-        return JsonResponse({"ok": True, "id": mission.id, "title": mission.title, "description": mission.description,
-                             "skill": mission.skill, "difficulty": mission.difficulty, "xp": mission.xp,
-                             "notice": "مأموریت ذخیره شد؛ رویداد آن برای منتور ثبت شد.",
-                             "total_count": Mission.objects.filter(user=request.user).count()})
-    except Exception as e:
-        return JsonResponse({"ok": False, "error": f"ساخت مأموریت ممکن نشد: {str(e)[:500]}"}, status=400)
+        mission = _create_ai_mission(request.user)
+    except Exception as exc:
+        return JsonResponse({"ok": False, "created": False, "error": str(exc)[:350]}, status=503)
+    return JsonResponse({
+        "ok": True, "created": True, "generated_by_ai": True, "id": mission.id,
+        "title": mission.title, "description": mission.description, "skill": mission.skill,
+        "difficulty": mission.difficulty, "xp": mission.xp,
+        "total_count": Mission.objects.filter(user=request.user).count(),
+        "active_count": Mission.objects.filter(user=request.user, completed=False).count(),
+    })
 
 @onboarding_required
 @require_POST
 def auto_mission(request):
-    """Let Nexora proactively create the next mission after onboarding/progress.
-
-    This is intentionally AI-only: if AI is not configured or quota is exhausted,
-    no fake AI-created mission is stored. The user can still use the manual local
-    fallback button when desired.
-    """
+    """Create the next mission only from a valid response from the configured AI."""
     active_count = Mission.objects.filter(user=request.user, completed=False).count()
     if active_count >= 6:
         return JsonResponse({"ok": True, "created": False, "reason": "enough_active_missions"})
@@ -678,7 +629,8 @@ def auto_mission(request):
         "Adapt to level and goal, build on completed work, and avoid duplicating active missions. XP must be 10-100. "
         f"Learner interests: {interests}. Level: {profile.current_level}. Goal: {profile.main_goal}. "
         f"Daily minutes: {profile.daily_minutes}. Active missions to avoid: {active_titles}. "
-        f"Completed missions to build on: {completed_titles}."
+        f"Completed missions to build on: {completed_titles}. Current profile interests override any older chat context: {profile.interests}. "
+        "Do not use old interests unless explicitly requested by the learner."
     )
     try:
         record_ai_usage(request.user, len(prompt))
@@ -776,32 +728,153 @@ def learning_hub(request):
         "interest_choices": INTEREST_CHOICES,
         "custom_interests": [topic for topic in (profile.interests or []) if topic not in dict(INTEREST_CHOICES)],
         "skills": skill_progress(request), "streak": calculate_streak(request),
+        "learning_paths": LearningPath.objects.filter(user=request.user),
         "usage": AIUsage.today(request.user), "notices": AgentNotice.objects.filter(user=request.user)[:8],
         "recent_quiz_attempts": QuizAttempt.objects.filter(quiz__user=request.user).select_related("quiz").order_by("-created_at")[:5],
     })
 
+def _generate_ai_daily_plan(user, force=False):
+    today = timezone.localdate()
+    existing = DailyPlan.objects.filter(user=user, plan_date=today).first()
+    if existing and not force:
+        if existing.generated_by_ai:
+            return {"title": existing.title, "items": existing.items, "cached": True}
+        existing.delete()
+    config = get_user_ai_config(user)
+    if not config or not config.get_api_key():
+        raise RuntimeError("ابتدا API هوش مصنوعی را در تنظیمات وصل کن.")
+    if not ai_quota_available(user, config):
+        raise RuntimeError("سهمیه روزانه هوش مصنوعی تمام شده است.")
+    profile = UserProfile.objects.get_or_create(user=user, defaults={"display_name": user.username})[0]
+    missions = list(Mission.objects.filter(user=user, completed=False).values_list("title", flat=True)[:10])
+    prompt = (
+        "برای امروز یک برنامه یادگیری واقع‌بینانه و شخصی به زبان فارسی بساز. فقط JSON معتبر با title و items برگردان. "
+        "items دقیقاً 3 تا 5 عضو داشته باشد و هر عضو title, minutes, task, reason داشته باشد. "
+        "مجموع minutes از زمان روزانه کاربر بیشتر نشود؛ کارها مشخص، عملی و قابل انجام باشند. "
+        f"علایق فعلی: {profile.interests}. سطح: {profile.current_level}. هدف: {profile.main_goal}. "
+        f"زمان در دسترس امروز: {profile.daily_minutes} دقیقه. مأموریت‌های فعال: {missions}. "
+        "از علایق قدیمی یا حدس‌های قبلی استفاده نکن؛ پروفایل فعلی مرجع است."
+    )
+    record_ai_usage(user, len(prompt))
+    raw = call_ai(config, [{"role": "user", "content": prompt}])
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        raise RuntimeError("پاسخ AI ساختار JSON معتبری نداشت.")
+    data = json.loads(raw[start:end + 1])
+    raw_items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(raw_items, list) or not 3 <= len(raw_items) <= 5:
+        raise RuntimeError("برنامه AI ساختار درستی نداشت.")
+    items=[]; remaining=max(10, min(240, int(profile.daily_minutes)))
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict): continue
+        title=str(raw_item.get("title", "")).strip()[:180]
+        task=str(raw_item.get("task", "")).strip()[:2000]
+        try: minutes=max(5, min(remaining, int(raw_item.get("minutes", 5))))
+        except (TypeError, ValueError): minutes=min(15, remaining)
+        if title and task and remaining >= 5:
+            minutes=min(minutes, remaining)
+            items.append({"title":title,"minutes":minutes,"task":task,"reason":str(raw_item.get("reason", "")).strip()[:300]})
+            remaining-=minutes
+    if len(items) < 3:
+        raise RuntimeError("برنامه AI حداقل سه فعالیت معتبر نداشت؛ چیزی ذخیره نشد.")
+    title=str(data.get("title") or "برنامه یادگیری امروز").strip()[:180]
+    DailyPlan.objects.filter(user=user, plan_date=today).delete()
+    plan=DailyPlan.objects.create(user=user, plan_date=today, title=title, items=items, generated_by_ai=True)
+    AgentNotice.objects.create(user=user, title="برنامه یادگیری با AI ساخته شد", detail=plan.title)
+    return {"title":plan.title,"items":plan.items,"cached":False}
+
+
 @onboarding_required
 @require_POST
 def generate_daily_plan(request):
-    
-    today = timezone.localdate()
-    existing = DailyPlan.objects.filter(user=request.user, plan_date=today).first()
-    if existing:
-        return JsonResponse({"ok": True, "title": existing.title, "items": existing.items, "cached": True})
-    profile = UserProfile.objects.get_or_create(user=request.user, defaults={"display_name": request.user.username})[0]
-    topic = (profile.interests or ["Python"])[0]
-    total = max(10, profile.daily_minutes)
-    first = max(5, total // 3)
-    second = max(5, total // 3)
-    third = max(5, total - first - second)
-    items = [
-        {"title": f"مرور {topic}", "minutes": first, "reason": "یادآوری فعال", "task": f"یک مفهوم از {topic} را بدون نگاه‌کردن به منبع، با زبان خودت توضیح بده."},
-        {"title": "تمرین عملی کوتاه", "minutes": second, "reason": "یادگیری با ساختن", "task": f"یک تمرین کوچک مرتبط با {topic} انجام بده و نتیجه را آزمایش کن."},
-        {"title": "ثبت آموخته‌ها", "minutes": third, "reason": "ماندگاری بیشتر", "task": "یک نکته‌ای که یاد گرفتی و یک سؤال برای جلسه بعد در دفتر یادداشت ثبت کن."},
-    ]
-    plan = DailyPlan.objects.create(user=request.user, plan_date=today, title="برنامه یادگیری امروز", items=items, generated_by_ai=False)
-    AgentNotice.objects.create(user=request.user, title="برنامه روزانه ساخته شد", detail=f"{plan.title}: " + "; ".join(str(i.get("title", "")) for i in items))
-    return JsonResponse({"ok": True, "title": plan.title, "items": plan.items, "generated_by_ai": False})
+    try:
+        result = _generate_ai_daily_plan(request.user, force=request.POST.get("force") == "1")
+    except Exception as exc:
+        return JsonResponse({"ok":False,"error":str(exc)[:350],"generated_by_ai":False},status=503)
+    return JsonResponse({"ok":True, **result, "generated_by_ai":True})
+
+
+def _create_ai_learning_path(user, topic):
+    topic=(topic or "").strip()[:100]
+    if not topic:
+        raise RuntimeError("یک تخصص یا موضوع انتخاب کن.")
+    config=get_user_ai_config(user)
+    if not config or not config.get_api_key():
+        raise RuntimeError("برای ساخت مسیر یادگیری، اول سرویس هوش مصنوعی و API Key را در تنظیمات وصل کن.")
+    if not ai_quota_available(user,config):
+        raise RuntimeError("سهمیه روزانه AI تمام شده است.")
+    profile=UserProfile.objects.get_or_create(user=user,defaults={"display_name":user.username})[0]
+    completed=list(Mission.objects.filter(user=user,completed=True).values_list("title",flat=True)[:20])
+    prompt=(
+        "تو مشاور آموزشی شخصی Nexora هستی. یک نقشه راه مرحله‌ای و واقعی برای یادگیری تخصص درخواستی بساز. "
+        "فقط JSON معتبر با title, overview, steps برگردان. steps دقیقاً 6 تا 10 مرحله داشته باشد. "
+        "هر مرحله باید id (کوتاه و یکتا)، title، objective، topics (آرایه رشته)، task، acceptance_criteria، estimated_hours و resources (آرایه عنوان/URL فقط اگر از وجود URL مطمئنی) داشته باشد. "
+        "از پایه شروع کن و پیش‌نیازها را رعایت کن؛ هر مرحله باید خروجی عملی و معیار پایان داشته باشد، مراحل را به ترتیب مرتب کن. "
+        "URL خیالی نساز؛ اگر لینک دقیق مطمئن نیستی resources را خالی بگذار. پاسخ فارسی باشد و اصطلاحات فنی لازم می‌توانند انگلیسی بمانند. "
+        f"تخصص درخواستی: {topic}. علایق فعلی: {profile.interests}. سطح: {profile.current_level}. "
+        f"هدف: {profile.main_goal}. زمان روزانه: {profile.daily_minutes} دقیقه. کارهای قبلاً تکمیل‌شده: {completed}. "
+        "علایق قبلی گفتگو را نادیده بگیر و فقط از پروفایل فعلی استفاده کن."
+    )
+    record_ai_usage(user,len(prompt))
+    raw=call_ai(config,[{"role":"user","content":prompt}])
+    start,end=raw.find("{"),raw.rfind("}")
+    if start<0 or end<=start: raise RuntimeError("خروجی JSON معتبر نبود")
+    try: data=json.loads(raw[start:end+1])
+    except json.JSONDecodeError as exc: raise RuntimeError("پاسخ AI قابل‌خواندن نبود") from exc
+    raw_steps=data.get("steps") if isinstance(data,dict) else None
+    if not isinstance(raw_steps,list) or not 6<=len(raw_steps)<=10: raise RuntimeError("مسیر باید ۶ تا ۱۰ مرحله معتبر داشته باشد")
+    steps=[]; seen=set()
+    for i,item in enumerate(raw_steps):
+        if not isinstance(item,dict): continue
+        step_id=str(item.get("id") or f"step-{i+1}").strip()[:40]
+        title=str(item.get("title") or "").strip()[:180]
+        objective=str(item.get("objective") or "").strip()[:1200]
+        task=str(item.get("task") or "").strip()[:2000]
+        if not title or not objective or not task or step_id in seen: continue
+        seen.add(step_id)
+        try: hours=max(1,min(200,int(item.get("estimated_hours",5))))
+        except (TypeError,ValueError): hours=5
+        topics=item.get("topics",[]); resources=item.get("resources",[])
+        steps.append({"id":step_id,"title":title,"objective":objective,
+            "topics":[str(x)[:100] for x in topics[:8]] if isinstance(topics,list) else [],
+            "task":task,"acceptance_criteria":str(item.get("acceptance_criteria") or "").strip()[:1200],
+            "estimated_hours":hours,"resources":[{"title":str(x.get("title",""))[:120],"url":str(x.get("url",""))[:500]} for x in resources[:5] if isinstance(x,dict) and str(x.get("title","")).strip() and str(x.get("url","")).startswith("https://")] if isinstance(resources,list) else [],
+            "completed":False})
+    if len(steps)<6: raise RuntimeError("مرحله‌های مسیر اعتبارسنجی نشدند")
+    path,_=LearningPath.objects.update_or_create(user=user,topic=topic,defaults={
+        "title":str(data.get("title") or f"مسیر یادگیری {topic}").strip()[:180],
+        "overview":str(data.get("overview") or "").strip()[:5000],"steps":steps,"generated_by_ai":True})
+    AgentNotice.objects.create(user=user,kind="learning_path_generated",title=f"مسیر یادگیری ساخته شد: {path.title}",detail=path.overview)
+    return path
+
+
+@onboarding_required
+@require_POST
+def generate_learning_path(request):
+    topic=(request.POST.get("topic") or "").strip()[:100]
+    try:
+        path=_create_ai_learning_path(request.user,topic)
+    except Exception as exc:
+        return JsonResponse({"ok":False,"error":f"مسیر ساخته نشد و چیزی ذخیره نشد: {str(exc)[:250]}"},status=502)
+    return JsonResponse({"ok":True,"id":path.id,"topic":path.topic,"title":path.title,"overview":path.overview,"steps":path.steps,"progress":path.progress_percent})
+
+
+@onboarding_required
+@require_POST
+def toggle_learning_step(request,path_id,step_id):
+    path=get_object_or_404(LearningPath,user=request.user,pk=path_id)
+    try: payload=json.loads(request.body or "{}")
+    except json.JSONDecodeError: payload={}
+    found=False; steps=[]
+    for step in path.steps:
+        step=dict(step)
+        if step.get("id")==step_id:
+            step["completed"]=bool(payload.get("completed")); found=True
+        steps.append(step)
+    if not found: return JsonResponse({"ok":False,"error":"مرحله پیدا نشد."},status=404)
+    path.steps=steps; path.save(update_fields=["steps","updated_at"])
+    return JsonResponse({"ok":True,"progress":path.progress_percent,"completed":path.completed_steps,"total":len(path.steps)})
+
 
 @onboarding_required
 @require_POST
@@ -863,78 +936,6 @@ def delete_project(request, project_id):
         project.delete()
         messages.success(request, "پروژه حذف شد.")
     return redirect("learning_hub")
-
-def quiz_question_bank(topic):
-    """Curated local question bank. Each item has four options and one correct answer."""
-    key = (topic or "Python").casefold()
-    if "django" in key or "جنگو" in key:
-        raw = [
-            ("در Django مسئول رسیدگی به درخواست و آماده‌کردن پاسخ چیست؟", ["View", "Migration", "Static file", "Model field"], 0, "View منطق رسیدگی به درخواست را اجرا می‌کند."),
-            ("برای نمایش HTML با داده‌های پویا از چه چیزی استفاده می‌شود؟", ["Template", "requirements.txt", "venv", "SQL console"], 0, "Template خروجی HTML را با context رندر می‌کند."),
-            ("برای تعریف مسیر URL معمولاً از چه چیزی استفاده می‌کنیم؟", ["path()", "makemigrations()", "print()", "collectstatic()"], 0, "تابع path مسیر را به view متصل می‌کند."),
-            ("کدام دستور تغییرات مدل را به فایل migration تبدیل می‌کند؟", ["makemigrations", "migrate فقط", "runserver", "createsuperuser"], 0, "makemigrations فایل migration تولید می‌کند."),
-            ("ForeignKey معمولاً چه رابطه‌ای می‌سازد؟", ["چندبه‌یک", "چندبه‌چند", "فقط یک‌به‌یک", "بدون رابطه"], 0, "ForeignKey معمولاً رابطه چند رکورد به یک رکورد را مدل می‌کند."),
-            ("برای گرفتن یک شیء و نمایش خطای 404 در صورت نبودن، کدام میانبر کاربردی است؟", ["get_object_or_404", "redirect_only", "admin.site", "JsonResponse فقط"], 0, "get_object_or_404 در صورت نبودن شیء پاسخ 404 می‌دهد."),
-        ]
-    elif any(x in key for x in ("html", "css", "frontend", "فرانت")):
-        raw = [
-            ("HTML بیشتر برای چه کاری استفاده می‌شود؟", ["ساختار محتوا", "ذخیره دیتابیس", "اجرای migration", "مدیریت رمز"], 0, "HTML ساختار محتوا را مشخص می‌کند."),
-            ("کدام ویژگی CSS فاصله داخلی عنصر را تنظیم می‌کند؟", ["padding", "href", "def", "SELECT"], 0, "padding فاصله بین محتوا و لبه داخلی است."),
-            ("کدام گزینه برای چیدمان واکنش‌گرا کاربرد دارد؟", ["Flexbox یا Grid", "print()", "ForeignKey", "pip"], 0, "Flexbox و Grid ابزارهای چیدمان هستند."),
-            ("برای لینک‌دادن در HTML معمولاً از کدام تگ استفاده می‌شود؟", ["a", "div فقط", "meta", "script فقط"], 0, "تگ a پیوند ایجاد می‌کند."),
-            ("کدام واحد CSS نسبت به اندازه فونت عنصر محاسبه می‌شود؟", ["em", "px همیشه", "kg", "ms"], 0, "em بر پایه اندازه فونت عنصر محاسبه می‌شود."),
-            ("برای انتخاب عنصر با شناسه در CSS از چه نمادی استفاده می‌شود؟", ["#", ".", "@", "$"], 0, "# برای انتخاب id به‌کار می‌رود."),
-        ]
-    elif any(x in key for x in ("امنیت", "cyber", "سایبری")):
-        raw = [
-            ("کدام روش برای ذخیره رمز عبور کاربران مناسب‌تر است؟", ["هش امن با salt", "متن ساده", "Base64", "فایل عمومی"], 0, "رمز باید با الگوریتم هش مناسب و salt ذخیره شود."),
-            ("اعتبارسنجی مهم ورودی کاربر بهتر است کجا انجام شود؟", ["سمت سرور", "فقط در CSS", "فقط در مرورگر", "در نام فایل"], 0, "اعتبارسنجی سمت سرور قابل دور زدن از مرورگر نیست."),
-            ("CSRF بیشتر برای جلوگیری از چه چیزی است؟", ["درخواست ناخواسته از طرف مرورگر کاربر", "حذف باگ نحوی", "کندی CPU", "فشرده‌سازی تصویر"], 0, "CSRF از برخی درخواست‌های جعلی با اعتبار کاربر جلوگیری می‌کند."),
-            ("کدام کار برای API Key امن‌تر است؟", ["نگهداری سمت سرور", "قرار دادن در JavaScript عمومی", "ارسال در URL", "انتشار در Git"], 0, "کلید محرمانه نباید به مرورگر یا مخزن عمومی برسد."),
-            ("HTTPS چه چیزی را فراهم می‌کند؟", ["رمزنگاری ارتباط در مسیر", "تضمین نبود همه باگ‌ها", "افزایش RAM", "جلوگیری از هرزنامه"], 0, "HTTPS ارتباط میان مرورگر و سرور را رمزنگاری می‌کند."),
-        ]
-    elif any(x in key for x in ("هوش مصنوعی", " ai ", "ai basics")):
-        raw = [
-            ("در یک درخواست مدل زبانی، prompt چیست؟", ["دستور و زمینه ورودی", "کارت گرافیک", "فایل دیتابیس", "رمز عبور"], 0, "Prompt دستور و زمینه‌ای است که به مدل داده می‌شود."),
-            ("چرا خروجی مدل باید بررسی شود؟", ["ممکن است اشتباه یا ساختگی باشد", "همیشه ثابت است", "هیچ‌وقت متن نیست", "چون فقط تصویر می‌سازد"], 0, "خروجی مدل می‌تواند خطا داشته باشد و نیازمند ارزیابی است."),
-            ("API Key را کجا نگه داریم؟", ["سمت سرور و محرمانه", "در HTML عمومی", "داخل URL", "در پیام خطا"], 0, "کلید API باید محرمانه بماند."),
-            ("temperature معمولاً چه چیزی را تغییر می‌دهد؟", ["میزان تنوع خروجی", "اندازه دیتابیس", "وضوح نمایشگر", "سرعت اینترنت"], 0, "temperature بالاتر معمولاً تنوع پاسخ را بیشتر می‌کند."),
-            ("برای کاهش هزینه API کدام روش مناسب است؟", ["درخواست فقط هنگام نیاز و محدودیت مصرف", "ارسال کل تاریخچه همیشه", "تکرار درخواست در حلقه", "خاموش‌کردن اعتبارسنجی"], 0, "محدودکردن درخواست و زمینه، مصرف را کاهش می‌دهد."),
-        ]
-    elif any(x in key for x in ("داده", "data")):
-        raw = [
-            ("میانگین حسابی چگونه به‌دست می‌آید؟", ["مجموع تقسیم بر تعداد", "بزرگ‌ترین منهای کوچک‌ترین", "تعداد تقسیم بر مجموع", "فقط مرتب‌سازی"], 0, "میانگین برابر مجموع مقادیر تقسیم بر تعداد آن‌هاست."),
-            ("در Python کدام ساختار برای نگهداری زوج کلید-مقدار مناسب است؟", ["dict", "int", "bool", "None"], 0, "dict داده را به شکل کلید و مقدار نگه می‌دارد."),
-            ("برای شمارش تعداد اعضای یک لیست از چه چیزی استفاده می‌شود؟", ["len()", "sum() همیشه", "max()", "type()"], 0, "len تعداد اعضا را برمی‌گرداند."),
-            ("میانه (median) در داده‌های مرتب چه مفهومی دارد؟", ["مقدار میانی", "مجموع همه مقادیر", "بزرگ‌ترین مقدار", "تعداد ستون‌ها"], 0, "میانه مقدار وسط داده‌های مرتب است."),
-            ("چرا داده‌ها را پیش از تحلیل پاک‌سازی می‌کنند؟", ["برای رسیدگی به داده ناقص یا ناسازگار", "برای تغییر تصادفی جواب", "برای حذف همه داده‌ها", "برای رمزگذاری CSS"], 0, "پاک‌سازی کیفیت و سازگاری داده را بهتر می‌کند."),
-        ]
-    elif any(x in key for x in ("الگوریتم", "حل مسئله", "problem")):
-        raw = [
-            ("اولین قدم خوب برای حل مسئله برنامه‌نویسی چیست؟", ["تعریف دقیق مسئله و ورودی/خروجی", "نوشتن کد تصادفی", "حذف تست‌ها", "انتخاب رنگ رابط"], 0, "باید مسئله و ورودی/خروجی روشن باشند."),
-            ("چرا از چند مورد آزمایشی استفاده می‌کنیم؟", ["برای پوشش حالت‌های مختلف", "برای کندکردن برنامه", "برای جایگزینی کد", "برای حذف ورودی"], 0, "چند تست می‌توانند خطاهای حالت‌های مرزی را آشکار کنند."),
-            ("پیچیدگی زمانی الگوریتم درباره چیست؟", ["رشد زمان اجرا با اندازه ورودی", "رنگ خروجی", "حجم مانیتور", "نام متغیر"], 0, "پیچیدگی زمانی رشد هزینه اجرا را توصیف می‌کند."),
-            ("کدام ساختار برای تکرار روی اعضای یک لیست مناسب است؟", ["for", "class فقط", "import فقط", "return فقط"], 0, "for برای پیمایش اعضای مجموعه کاربرد دارد."),
-            ("حالت مرزی (edge case) چیست؟", ["ورودی یا وضعیت خاصی که ممکن است مشکل ایجاد کند", "فقط حالت عادی", "نام فایل", "نوع فونت"], 0, "حالت‌های مرزی رفتار برنامه را در شرایط خاص می‌سنجند."),
-        ]
-    else:
-        raw = [
-            ("کدام نوع داده برای نگهداری چند مقدار مرتب مناسب است؟", ["list", "int", "bool", "None"], 0, "list مجموعه‌ای مرتب و قابل تغییر است."),
-            ("در Python برای تعریف تابع از چه کلمه‌ای استفاده می‌شود؟", ["func", "def", "function", "make"], 1, "تعریف تابع با def آغاز می‌شود."),
-            ("کدام عبارت مقدار بولی True را نشان می‌دهد؟", ["'True'", "1 == 2", "True", "None"], 2, "True مقدار بولی است؛ 'True' یک رشته است."),
-            ("برای تبدیل رشته عددی '12' به عدد صحیح از چه چیزی استفاده می‌شود؟", ["int('12')", "str(12)", "list(12)", "bool('12') فقط"], 0, "int رشته عددی را به عدد صحیح تبدیل می‌کند."),
-            ("کدام ساختار برای اجرای شرط استفاده می‌شود؟", ["if", "for فقط", "import", "class"], 0, "if بر اساس یک شرط مسیر اجرا را انتخاب می‌کند."),
-            ("در Python کدام علامت برای مقایسه برابری است؟", ["==", "=", "!= فقط", ":="], 0, "== دو مقدار را از نظر برابری مقایسه می‌کند."),
-        ]
-    questions = []
-    for question, options, answer_index, explanation in random.sample(raw, k=min(5, len(raw))):
-        
-        pairs = list(enumerate(options))
-        random.shuffle(pairs)
-        new_options = [option for _, option in pairs]
-        new_answer = next(i for i, (original_i, _) in enumerate(pairs) if original_i == answer_index)
-        questions.append({"question": question, "options": new_options, "answer_index": new_answer, "explanation": explanation})
-    return questions
 
 def detect_quiz_topic(text, profile=None):
     low = (text or "").casefold()
@@ -1003,28 +1004,18 @@ def create_ai_quiz(user, topic, config=None):
     title = str(data.get("title") or f"آزمون هوش مصنوعی {topic}").strip()[:180]
     return Quiz.objects.create(user=user, title=title, topic=topic, questions=validated, generated_by_ai=True)
 
-def create_local_quiz(user, topic):
-    topic = (topic or "Python").strip()[:100] or "Python"
-    questions = quiz_question_bank(topic)
-    return Quiz.objects.create(user=user, title=f"آزمون محلی {topic}", topic=topic, questions=questions, generated_by_ai=False)
-
 @onboarding_required
 @require_POST
 def generate_quiz(request):
     topic = (request.POST.get("topic") or "Python").strip()[:100] or "Python"
     config = get_user_ai_config(request.user)
-    if config and config.get_api_key() and ai_quota_available(request.user, config):
-        try:
-            quiz = create_ai_quiz(request.user, topic, config=config)
-            AgentNotice.objects.create(user=request.user, title=f"آزمون AI ساخته شد: {quiz.title}", detail=f"{len(quiz.questions)} سؤال درباره {topic}")
-            messages.success(request, f"آزمون «{quiz.title}» با هوش مصنوعی ساخته شد.")
-        except Exception as exc:
-            quiz = create_local_quiz(request.user, topic)
-            messages.warning(request, f"ساخت آزمون با AI ناموفق بود؛ نسخه محلی ساخته شد. علت: {str(exc)[:180]}")
-    else:
-        quiz = create_local_quiz(request.user, topic)
-        reason = "API تنظیم نشده" if not config or not config.get_api_key() else "سقف روزانه AI تمام شده"
-        messages.warning(request, f"آزمون محلی ساخته شد، نه AI؛ {reason}.")
+    try:
+        quiz = create_ai_quiz(request.user, topic, config=config)
+    except Exception as exc:
+        messages.error(request, f"آزمون ساخته نشد و آزمون محلی جایگزین نشد: {str(exc)[:220]}")
+        return redirect("learning_hub")
+    AgentNotice.objects.create(user=request.user, title=f"آزمون AI ساخته شد: {quiz.title}", detail=f"{len(quiz.questions)} سؤال درباره {topic}")
+    messages.success(request, f"آزمون «{quiz.title}» با هوش مصنوعی ساخته شد.")
     return redirect("quiz_detail", quiz_id=quiz.pk)
 
 @onboarding_required

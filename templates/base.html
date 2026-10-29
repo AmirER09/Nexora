@@ -1,13 +1,14 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
 <head>
+  {% load static %}
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Nexora{% endblock %} — Nexora</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script>document.documentElement.dataset.theme="{{ profile.theme|default:'aurora' }}"</script>
-  <link rel="stylesheet" href="/static/css/app.css?v=20261028-interestfix">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20261029-pro-ui">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -20,7 +21,8 @@
     <nav class="nav">
       <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}"><span class="nav-icon">◈</span> داشبورد <span class="nav-arrow">↖</span></a>
       <a href="/mentor/" class="nav-link {% if request.path == '/mentor/' %}active{% endif %}"><span class="nav-icon">✳</span> منتور هوشمند <span class="nav-pill">AI</span></a>
-      <a href="/learning/" class="nav-link {% if request.path == '/learning/' %}active{% endif %}"><span class="nav-icon">◉</span> مرکز یادگیری</a>
+      <a href="/learning/" class="nav-link {% if request.path == '/learning/' and request.GET.tab != 'path' %}active{% endif %}"><span class="nav-icon">◉</span> مرکز یادگیری</a>
+      <a href="/learning/#learning-paths" class="nav-link roadmap-nav-link"><span class="nav-icon">⌁</span> مسیر یادگیری <span class="nav-pill">ROADMAP</span></a>
       <a href="/portfolio/" class="nav-link {% if request.path == '/portfolio/' %}active{% endif %}"><span class="nav-icon">▧</span> پورتفولیوی من</a>
       <a href="/settings/" class="nav-link {% if request.path == '/settings/' %}active{% endif %}"><span class="nav-icon">⌘</span> تنظیمات هوشمند</a>
     </nav>
@@ -40,14 +42,14 @@
     <header class="topbar">
       <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
       <div class="breadcrumb"><span>NEXORA</span><i>/</i>{% block breadcrumb %}داشبورد{% endblock %}</div>
-      <div class="top-actions"><span class="date-chip"><span class="tiny-sun">✳</span> هر روز، یک قدم جلوتر</span><label class="theme-picker" title="تغییر رنگ Nexora"><span aria-hidden="true">◐</span><select id="theme-select" aria-label="انتخاب تم"><option value="aurora">آرورا</option><option value="ocean">اقیانوس</option><option value="rose">رز</option><option value="emerald">زمرد</option><option value="sunset">غروب</option></select></label><a class="icon-button" href="/settings/" title="تنظیمات">⚙</a><div class="top-avatar">{{ profile.display_name|default:request.user.username|slice:":1"|upper }}</div></div>
+      <div class="top-actions"><span class="date-chip"><span class="tiny-sun">✳</span> هر روز، یک قدم جلوتر</span><label class="theme-picker" title="تغییر رنگ Nexora"><span aria-hidden="true">◐</span><select id="theme-select" aria-label="انتخاب تم"><option value="aurora">آرورا</option><option value="ocean">اقیانوس</option><option value="rose">رز</option><option value="emerald">زمرد</option><option value="sunset">غروب (تیره)</option><option value="pearl">مروارید روشن</option><option value="lavender-light">یاسی روشن</option><option value="mint-light">نعنایی روشن</option></select></label><a class="icon-button" href="/settings/" title="تنظیمات">⚙</a><div class="top-avatar">{{ profile.display_name|default:request.user.username|slice:":1"|upper }}</div></div>
     </header>
     {% if messages %}<div class="messages">{% for message in messages %}<div class="flash {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
     {% block content %}{% endblock %}
     <footer class="footer"><span>✳ NEXORA <span class="muted">· ساخته‌شده برای یادگیری واقعی</span></span><span class="footer-right">BUILD SMALL. LEARN DEEP.</span></footer>
   </main>
 </div>
-<script src="/static/js/app.js?v=20261028-interestfix"></script>
-<script src="/static/js/themes.js"></script>
+<script src="{% static 'js/app.js' %}?v=20261029-pro-ui"></script>
+<script src="{% static 'js/themes.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body></html>

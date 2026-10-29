@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AIConfig, Mission, ChatMessage, LearningProfile, LearningNote, CodeProject, DailyPlan, Quiz, QuizAttempt, AgentNotice, AIUsage, UserProfile
+from .models import AIConfig, Mission, ChatMessage, LearningProfile, LearningNote, CodeProject, DailyPlan, Quiz, QuizAttempt, AgentNotice, AIUsage, UserProfile, LearningPath
 @admin.register(AIConfig)
 class AIConfigAdmin(admin.ModelAdmin):
     list_display = ("user", "name", "provider", "model", "is_active", "updated_at")
@@ -55,3 +55,10 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "display_name", "current_level", "onboarding_complete", "theme", "updated_at")
     list_filter = ("onboarding_complete", "current_level", "theme")
     search_fields = ("user__username", "display_name", "main_goal")
+
+
+@admin.register(LearningPath)
+class LearningPathAdmin(admin.ModelAdmin):
+    list_display = ("title", "topic", "user", "generated_by_ai", "updated_at")
+    list_filter = ("generated_by_ai",)
+    search_fields = ("title", "topic", "overview", "user__username")

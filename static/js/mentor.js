@@ -1,6 +1,47 @@
-const form=document.querySelector("#chat-form"),input=document.querySelector("#chat-input"),box=document.querySelector("#chat-messages");
-function addMessage(role,text){const row=document.createElement("div");row.className="chat-message "+role;row.innerHTML=`<div class="chat-face">${role==="user"?"A":"n."}</div><div class="message-body"><div class="message-name">${role==="user"?"تو":"Nexora"}</div><div class="message-text"></div></div>`;const body=row.querySelector(".message-text");if(role!=="assistant"){body.textContent=text;}else{const routePattern=/\/learning\/quizzes\/\d+\/|\/portfolio\/|\/learning\//g;let cursor=0;for(const match of text.matchAll(routePattern)){const index=match.index;if(index>cursor)body.append(document.createTextNode(text.slice(cursor,index)));const link=document.createElement("a");link.href=match[0];link.textContent=match[0];link.className="chat-action-link";body.append(link);cursor=index+match[0].length;}if(cursor<text.length)body.append(document.createTextNode(text.slice(cursor)));}box.appendChild(row);box.scrollTop=box.scrollHeight;return row;}
-form.addEventListener("submit",async e=>{e.preventDefault();const text=input.value.trim();if(!text)return;input.value="";addMessage("user",text);const waiting=addMessage("assistant","دارم فکر می‌کنم...");const send=form.querySelector("button[type=submit]");send.disabled=true;try{const data=await postJSON("/api/chat/",{message:text});waiting.querySelector(".message-text").textContent=data.reply;}catch(err){waiting.querySelector(".message-text").textContent=err.message;}finally{send.disabled=false;box.scrollTop=box.scrollHeight;input.focus();}});
-input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
-document.querySelectorAll("[data-prompt]").forEach(b=>b.addEventListener("click",()=>{input.value=b.dataset.prompt;input.focus();}));
-box.scrollTop=box.scrollHeight;
+(() => {
+  const form = document.querySelector('#chat-form');
+  const input = document.querySelector('#chat-input');
+  const box = document.querySelector('#chat-messages');
+  if (!form || !input || !box) return;
+  const sendButton = form.querySelector('button[type="submit"]');
+  const scrollToLatest = () => { box.scrollTop = box.scrollHeight; };
+
+  function appendMessage(role, text, pending = false) {
+    const article = document.createElement('article');
+    article.className = `chat-message ${role}${pending ? ' is-pending' : ''}`;
+    const face = document.createElement('div');
+    face.className = `chat-face${role === 'assistant' ? ' mentor-face' : ''}`;
+    face.textContent = role === 'user' ? 'ش' : 'n.';
+    const body = document.createElement('div'); body.className = 'message-body';
+    const name = document.createElement('div'); name.className = 'message-name'; name.textContent = role === 'user' ? 'تو' : 'Nexora';
+    if (role === 'assistant') { const label = document.createElement('span'); label.textContent = 'منتور هوشمند'; name.appendChild(label); }
+    const message = document.createElement('div'); message.className = 'message-text'; message.textContent = text;
+    body.append(name, message); article.append(face, body); box.appendChild(article); scrollToLatest();
+    return { article, message };
+  }
+
+  async function sendMessage(value) {
+    const text = value.trim();
+    if (!text || sendButton.disabled) return;
+    input.value = ''; input.style.height = 'auto';
+    appendMessage('user', text);
+    const pending = appendMessage('assistant', 'دارم پیام تو رو بررسی می‌کنم…', true);
+    sendButton.disabled = true; input.disabled = true; form.classList.add('is-sending');
+    try {
+      if (typeof postJSON !== 'function') throw new Error('ارتباط با سرویس گفتگو آماده نیست. صفحه رو یک‌بار تازه‌سازی کن.');
+      const data = await postJSON('/api/chat/', { message: text });
+      pending.message.textContent = data.reply || 'پاسخی دریافت نشد. دوباره امتحان کن.';
+      pending.article.classList.remove('is-pending');
+    } catch (error) {
+      pending.article.classList.remove('is-pending'); pending.article.classList.add('message-error');
+      pending.message.textContent = error.message || 'ارسال پیام انجام نشد. اتصال رو بررسی کن و دوباره تلاش کن.';
+    } finally {
+      sendButton.disabled = false; input.disabled = false; form.classList.remove('is-sending'); input.focus(); scrollToLatest();
+    }
+  }
+  form.addEventListener('submit', event => { event.preventDefault(); sendMessage(input.value); });
+  input.addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); } });
+  input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 150)}px`; });
+  document.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => { input.value = button.dataset.prompt || ''; input.focus(); input.dispatchEvent(new Event('input')); }));
+  scrollToLatest();
+})();

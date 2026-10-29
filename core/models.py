@@ -210,6 +210,35 @@ class AgentNotice(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+
+class LearningPath(models.Model):
+    """An AI-generated learning roadmap owned by one learner."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="learning_paths")
+    topic = models.CharField(max_length=100)
+    title = models.CharField(max_length=180)
+    overview = models.TextField(blank=True)
+    steps = models.JSONField(default=list, blank=True)
+    generated_by_ai = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        constraints = [models.UniqueConstraint(fields=["user", "topic"], name="unique_user_learning_path_topic")]
+
+    @property
+    def completed_steps(self):
+        return sum(1 for step in self.steps if isinstance(step, dict) and step.get("completed"))
+
+    @property
+    def progress_percent(self):
+        if not self.steps:
+            return 0
+        return round(self.completed_steps * 100 / len(self.steps))
+
+    def __str__(self):
+        return f"{self.user} — {self.topic}"
+
 class AIUsage(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="nexora_ai_usage")
     day = models.DateField()
