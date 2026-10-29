@@ -4,3 +4,4 @@ cryptography>=44.0,<47.0
 python-dotenv>=1.0,<2.0
 whitenoise>=6.9,<7.0
 waitress>=3.0,<4.0
+Pillow>=11.0,<13.0
